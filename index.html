@@ -12677,6 +12677,23 @@ function clockSv(h, m) {
 
 /* ===================== Tehtävägeneraattorit ===================== */
 // Tehtävä: {type:'input'|'mc'|'order', prompt, answers[], options[], answer, expl, skill, tts?, passage?, audio?, area?}
+// Merkitysluokat, jotta generoidut yhdistelmät ovat luontevia (ei esim. *de rena juicerna, *en smutsig vänskap)
+const W = x => new Set(x.split(' '));
+const MASS_N = W('juice släkt vänskap bråk nät mellanår klimat regn snö luft musik mjölk vatten kaffe te socker salt smör information kärlek hälsa ekonomi natur miljö fritid väder trafik politik forskning kultur ungdom framtid historia sjukvård');
+const ABSTRACT_N = W('ansökan förhållande relation känsla vänskap bråk släkt ålder hyra kunskap erfarenhet möjlighet utmaning dröm mål tjänst lön intresse minne svar mening ämne modersmål åsikt källa nät lösenord mellanår lov användare');
+const PERSON_N = W('förälder mamma pappa bror syster syskon barn son dotter kusin vän kompis pojkvän flickvän granne släkting tonåring människa person pojke flicka man kvinna lärare elev klasskamrat chef kollega arbetsgivare kund läkare sjukskötare ingenjör försäljare advokat turist vegetarian');
+const FOOD_N = W('bröd ost juice fisk kyckling korv potatis grönsak frukt äpple bär ägg soppa sallad kaka glass frukost lunch middag mellanmål måltid');
+const EVENT_N = W('flyg rast vecka fest bröllop födelsedag lektion kurs prov läxa uppsats fråga film serie låt konsert match resa promenad semester helg intervju nyhet artikel program video debatt spel sport hobby utbildning arbete jobb sommarjobb yrke recept ord språk betyg schema');
+const PERSON_ADJ = W('lång kort gammal ung snabb stark svag glad ledsen snäll elak rolig smart klok duktig trött rik fattig stor liten söt vacker flitig lat modig blyg lugn noggrann pratsam envis nyfiken ärlig sportig populär hungrig arg sjuk frisk vänlig trevlig social kreativ ambitiös');
+const FAST_N = W('bil buss tåg båt cykel flygplan dator mobil telefon färja');
+const PLACE_N = W('stad by förort land huvudstad kyrka sjukhus bibliotek skola gymnasium universitet yrkeshögskola restaurang kafé hotell station flygplats hållplats affär butik strand skog sjö hav trädgård gata väg sevärdhet företag gym');
+const ROOM_N = W('rum kök sovrum vardagsrum badrum lägenhet hus hem sommarstuga bastu');
+const GROUP_N = W('familj klass band'); const ADJ_SKIP_N = W('födelsedag bröllop');
+const KIN_N = W('mamma pappa bror syster syskon barn son dotter kusin förälder släkting');
+const ADJ_BY_CAT = { group: W('stor liten'), kin: W('gammal lång kort rolig'), person: W('ny gammal lång kort rolig tråkig'), food: W('god varm kall billig dyr stor liten'), event: W('lång kort viktig intressant tråkig rolig svår lätt'), place: W('stor liten ny gammal fin vacker ful modern populär'), room: W('stor liten ny gammal fin vacker ful ren smutsig mörk ljus modern mysig varm kall'), thing: W('stor liten ny gammal fin billig dyr ful ren smutsig modern') };
+const nounCat = n => GROUP_N.has(n.sv) ? 'group' : KIN_N.has(n.sv) ? 'kin' : PERSON_N.has(n.sv) ? 'person' : FOOD_N.has(n.sv) ? 'food' : EVENT_N.has(n.sv) ? 'event' : PLACE_N.has(n.sv) ? 'place' : ROOM_N.has(n.sv) ? 'room' : 'thing';
+function adjFor(n) { const ok = new Set(ADJ_BY_CAT[nounCat(n)]); if (FAST_N.has(n.sv)) ok.add('snabb'); const L = ADJ_GENERIC.filter(a => ok.has(a.sv)); return pick(L.length ? L : ADJ_GENERIC); }
+const adjNouns = (plural, adj) => concreteNouns().filter(n => !ABSTRACT_N.has(n.sv) && !(plural && MASS_N.has(n.sv)) && !(adj && ADJ_SKIP_N.has(n.sv)));
 const concreteNouns = () => LEX.nouns.filter(n => isGenderSafe(n.sv) && ['koti', 'koulu', 'matka', 'vapaa', 'ruoka', 'media', 'tyo', 'perhe'].includes(n.theme) && n.pl !== '-');
 const ADJ_GENERIC = ['stor', 'liten', 'ny', 'gammal', 'fin', 'billig', 'dyr', 'vacker', 'ful', 'lång', 'kort', 'viktig', 'intressant', 'tråkig', 'rolig', 'svår', 'lätt', 'ren', 'smutsig', 'mörk', 'ljus', 'modern', 'mysig', 'populär', 'dålig', 'god', 'snabb', 'varm', 'kall'].map(s => LEX.adjs.find(a => a.sv === s)).filter(Boolean);
 function adjForm(a, kind) { // kind: en|ett|pl|def
@@ -12697,30 +12714,32 @@ function inItem(skillId, prompt, answers, expl, extra = {}) { return Object.assi
 const GEN = {
   gender(sk) { const n = pick(concreteNouns().concat(LEX.nouns.filter(x => isGenderSafe(x.sv)))); if (Math.random() < 0.5) return mcItem(sk, `Kumpi artikkeli? <b>___ ${esc(n.sv)}</b> <span class="muted">(${esc(n.fi)})</span>`, [n.g, n.g === 'en' ? 'ett' : 'en'], `${n.g} ${n.sv} – ${n.def}`, { tts: n.g + ' ' + n.sv });
     return inItem(sk, `Kirjoita määräinen muoto: <b>${n.g} ${esc(n.sv)}</b> <span class="muted">(${esc(n.fi)})</span>`, [n.def], `${n.g} ${n.sv} → ${n.def}`, { tts: n.def }); },
-  plural(sk) { const n = pick(LEX.nouns.filter(x => x.pl !== '-')); const r = Math.random(); if (r < 0.5) return inItem(sk, `Epämääräinen monikko: <b>${n.g} ${esc(n.sv)}</b> → två ___ <span class="muted">(${esc(n.fi)})</span>`, [n.pl], cardForms(n), { tts: n.pl });
+  plural(sk) { const n = pick(LEX.nouns.filter(x => x.pl !== '-' && !MASS_N.has(x.sv))); const r = Math.random(); if (r < 0.5) return inItem(sk, `Epämääräinen monikko: <b>${n.g} ${esc(n.sv)}</b> → två ___ <span class="muted">(${esc(n.fi)})</span>`, [n.pl], cardForms(n), { tts: n.pl });
     return inItem(sk, `Määräinen monikko: <b>${n.g} ${esc(n.sv)}</b> → ___ <span class="muted">(${esc(n.fi)}, monikko määr.)</span>`, [n.pld], cardForms(n), { tts: n.pld }); },
-  genitive(sk) { const [o, ofi] = pick(GEN_OWNERS); const n = pick(concreteNouns()); const ans = /[sxz]$/.test(o) ? o + ' ' + n.sv : o + 's ' + n.sv; const nfi = n.fi.split(',')[0];
+  genitive(sk) { const [o, ofi] = pick(GEN_OWNERS); const n = pick(adjNouns(false)); const ans = /[sxz]$/.test(o) ? o + ' ' + n.sv : o + 's ' + n.sv; const nfi = n.fi.split(',')[0];
     return inItem(sk, `Käännä genetiivillä: <b>${esc(ofi)} ${esc(nfi)}</b> <span class="muted">(${esc(o)} + ${esc(n.sv)})</span>`, [ans], /[sxz]$/.test(o) ? 's-loppuinen nimi: ei lisä-s:ää.' : 'Omistaja + s, omistettava epämääräisenä.'); },
-  adjIndef(sk) { const a = pick(ADJ_GENERIC), n = pick(concreteNouns()); const k = pick(['en', 'ett', 'pl', 'pred']);
+  adjIndef(sk) { const k = pick(['en', 'ett', 'pl', 'pred']); const n = pick(adjNouns(k === 'pl', true)), a = adjFor(n);
     if (k === 'pl') return inItem(sk, `två ___ ${esc(n.pl)} <span class="muted">(${esc(a.sv)})</span>`, [adjForm(a, 'pl')], `Monikko: ${adjForm(a, 'pl')}.`);
     if (k === 'pred') { const f = n.g === 'ett' ? adjForm(a, 'ett') : adjForm(a, 'en'); return inItem(sk, `${esc(cap(n.def))} är ___. <span class="muted">(${esc(a.sv)})</span>`, [f], `Predikatiivi taipuu: ${n.g}-sana → ${f}.`); }
     const f = adjForm(a, n.g); return inItem(sk, `${n.g} ___ ${esc(n.sv)} <span class="muted">(${esc(a.sv)})</span>`, [f], `${n.g}-sana → ${n.g} ${f} ${n.sv}.`); },
-  adjDef(sk) { const a = pick(ADJ_GENERIC), n = pick(concreteNouns()); const k = pick(['def', 'def', 'pl', 'poss']);
+  adjDef(sk) { const k = pick(['def', 'def', 'pl', 'poss']); const n = pick(adjNouns(k === 'pl', true)), a = adjFor(n);
     if (k === 'poss') { const [fi, en, et, pl] = pick(POSS.slice(0, 4)); const p = n.g === 'ett' ? et : en; const ans = `${p} ${adjForm(a, 'def')} ${n.sv}`; return inItem(sk, `Käännä: <b>${esc(fi)} ${esc(a.fi.split(',')[0])} ${esc(n.fi.split(',')[0])}</b> <span class="muted">(${esc(p)} + ${esc(a.sv)} + ${esc(n.sv)})</span>`, [ans], 'Possessiivin jälkeen adjektiivi -a, substantiivi epämääräinen.'); }
     if (k === 'pl') { const ans = `de ${adjForm(a, 'defpl')} ${n.pld}`; return inItem(sk, `Määräinen monikko: <b>(${esc(a.sv)} + ${esc(n.sv)})</b> → ___`, [ans], 'de + adj -a + määr. monikko.'); }
     const art = n.g === 'ett' ? 'det' : 'den'; const ans = `${art} ${adjForm(a, 'def')} ${n.def}`; return inItem(sk, `Määräinen muoto: <b>(${esc(a.sv)} + ${esc(n.sv)})</b> → ___ <span class="muted">(${esc(a.fi.split(',')[0])} ${esc(n.fi.split(',')[0])})</span>`, [ans], `${art} + adj -a + ${n.def}.`); },
-  compare(sk) { const a = pick(LEX.adjs.filter(x => x.pl !== x.sv)); const k = Math.random() < 0.55 ? 'komp' : 'sup';
+  compare(sk) { const PA = LEX.adjs.filter(x => x.pl !== x.sv && PERSON_ADJ.has(x.sv)); const a = pick(PA.length > 8 ? PA : LEX.adjs.filter(x => x.pl !== x.sv)); const k = Math.random() < 0.55 ? 'komp' : 'sup'; // vain ihmiseen sopivat adjektiivit
     const komp = a.komp === '-' ? 'mer ' + a.sv : a.komp, sup = a.superl === '-' ? 'mest ' + a.sv : a.superl;
-    if (k === 'komp') return inItem(sk, `Komparatiivi: <b>${esc(a.sv)}</b> → <i>Min bror är ___ än jag.</i> <span class="muted">(${esc(a.fi.split(',')[0])})</span>`, [komp], `${a.sv} – ${komp} – ${sup}`);
-    return inItem(sk, `Superlatiivi: <b>${esc(a.sv)}</b> → <i>Hon är ___ i klassen.</i>`, [sup], `${a.sv} – ${komp} – ${sup}`); },
+    const supDef = a.superl === '-' ? 'mest ' + a.pl : a.superl.endsWith('ast') ? a.superl + 'e' : a.superl + 'a'; const longA = /(sam|bar|isk|ad|iv|ös|ent|ant|ell)$/.test(a.sv);
+    const kompAlt = [komp].concat(longA && a.komp !== '-' ? ['mer ' + a.sv] : []), supAlt = [sup, 'den ' + supDef].concat(longA && a.superl !== '-' ? ['mest ' + a.sv, 'den mest ' + a.pl] : []);
+    if (k === 'komp') return inItem(sk, `Komparatiivi: <b>${esc(a.sv)}</b> → <i>Min bror är ___ än jag.</i> <span class="muted">(${esc(a.fi.split(',')[0])})</span>`, kompAlt, `${a.sv} – ${komp} – ${sup}`);
+    return inItem(sk, `Superlatiivi: <b>${esc(a.sv)}</b> → <i>Hon är ___ i klassen.</i> <span class="muted">(${esc(a.fi.split(',')[0])})</span>`, supAlt, `${a.sv} – ${komp} – ${sup}. Predikatiivina superlatiivi voi olla perusmuodossa (<i>Hon är ${sup}</i>) tai määräisenä yksikössä (<i>Hon är den ${supDef}</i>). <b>de</b> on monikko: <i>De är de ${supDef}</i>.`); },
   persPron(sk) { if (Math.random() < 0.65) { const f = pick(PERS_FRAMES), [sv, fi] = pick(PERS_OBJ); return inItem(sk, `${esc(f)} <span class="muted">(${esc(fi)})</span>`, [sv], `Objektimuoto: ${sv}.`); }
     const f = pick(SUBJ_FRAMES), [sv, fi] = pick(PERS_SUBJ); return inItem(sk, `${esc(f)} <span class="muted">(${esc(fi)})</span>`, [sv], `Subjektimuoto: ${sv}.`); },
   possPron(sk) { if (Math.random() < 0.5) { const [q, o, e] = pick(SIN_BANK); return mcItem(sk, esc(q), o, e); }
-    const [fi, en, et, pl] = pick(POSS); const n = pick(concreteNouns()); const k = pick(['en', 'pl']); const isPl = k === 'pl'; const ans = isPl ? pl : (n.g === 'ett' ? et : en); const word = isPl ? n.pl : n.sv;
+    const [fi, en, et, pl] = pick(POSS); const k = pick(['en', 'pl']); const n = pick(adjNouns(k === 'pl')); const isPl = k === 'pl'; const ans = isPl ? pl : (n.g === 'ett' ? et : en); const word = isPl ? n.pl : n.sv;
     return inItem(sk, `<b>(${esc(fi)})</b> ___ ${esc(word)} <span class="muted">(${esc(n.g)}-sana${isPl ? ', monikko' : ''})</span>`, [ans], `${fi}: ${en} / ${et} / ${pl}`); },
   reflPron(sk) { const [s, r] = pick(REFL), [v, fi] = pick(REFL_VERBS); let verb = v; return inItem(sk, `${esc(cap(s))} ${esc(verb)}. <span class="muted">(${esc(fi)})</span>`, [r], `${s} → ${r}.`); },
-  demPron(sk) { const n = pick(concreteNouns()); const near = Math.random() < 0.5, pl = Math.random() < 0.35; const art = pl ? 'de' : (n.g === 'ett' ? 'det' : 'den'); const ans = `${art} ${near ? 'här' : 'där'} ${pl ? n.pld : n.def}`; const fi = (near ? (pl ? 'nämä' : 'tämä') : (pl ? 'nuo' : 'tuo')) + ' ' + n.fi.split(',')[0];
-    return inItem(sk, `Käännä: <b>${esc(fi)}</b> <span class="muted">(${esc(n.g)} ${esc(n.sv)}${pl ? ', monikko' : ''})</span>`, [ans], `${art} ${near ? 'här' : 'där'} + määräinen muoto.`); },
+  demPron(sk) { const near = Math.random() < 0.5, pl = Math.random() < 0.35; const n = pick(adjNouns(pl)); const art = pl ? 'de' : (n.g === 'ett' ? 'det' : 'den'); const ans = `${art} ${near ? 'här' : 'där'} ${pl ? n.pld : n.def}`; const dem = near ? (pl ? 'nämä' : 'tämä') : (pl ? 'nuo' : 'tuo');
+    return inItem(sk, `Käännä: <b>${dem}</b> + <b>${esc(n.fi.split(',')[0])}</b> <span class="muted">(${esc(n.g)} ${esc(n.sv)} · ${pl ? 'monikko' : 'yksikkö'})</span>`, [ans], `${art} ${near ? 'här' : 'där'} + määräinen muoto.`); },
   present(sk) { const v = pick(presVerbs()); const s = pick(SUBJ_ANY); return inItem(sk, `Preesens: <b>${esc(s)} ___</b> <span class="muted">(${esc(v.sv)} = ${esc(v.fi.split(',')[0])})</span>`, [v.pres], cardForms(v), { tts: s + ' ' + v.pres }); },
   pretWeak(sk) { const v = pick(weakVerbs()); const s = pick(SUBJ_ANY); return inItem(sk, `Imperfekti: <b>I går ___ ${esc(s)} …</b> <span class="muted">(${esc(v.sv)})</span>`, alts(v.pret), cardForms(v)); },
   strong(sk) { const v = pick(strongVerbs()); const k = Math.random() < 0.5 ? 'pret' : 'sup';
@@ -12728,7 +12747,7 @@ const GEN = {
     return inItem(sk, `Supiini: <b>${esc(v.sv)}</b> → jag har ___ <span class="muted">(${esc(v.fi.split(',')[0])})</span>`, alts(v.sup), cardForms(v)); },
   perfect(sk) { const v = pick(presVerbs()); const plus = Math.random() < 0.35; const s = pick(SUBJ_ANY); const aux = plus ? 'hade' : 'har';
     return inItem(sk, `${plus ? 'Pluskvamperfekti' : 'Perfekti'}: <b>${esc(cap(s))} ___ ___</b> <span class="muted">(${esc(v.sv)} – kirjoita apuverbi + supiini)</span>`, alts(v.sup).map(x => aux + ' ' + x), cardForms(v)); },
-  imperative(sk) { const v = pick(presVerbs().filter(x => !['kunna', 'veta', 'heta', 'finnas', 'hända', 'gälla', 'betyda', 'verka', 'dö', 'regna', 'snöa', 'skina', 'misslyckas', 'växa', 'sjunka'].includes(x.sv))); const im = imperativeOf(v);
+  imperative(sk) { const v = pick(presVerbs().filter(x => !['kunna', 'veta', 'heta', 'finnas', 'hända', 'gälla', 'betyda', 'verka', 'dö', 'regna', 'snöa', 'skina', 'misslyckas', 'växa', 'sjunka', 'orsaka', 'öka', 'minska', 'må', 'brinna', 'frysa', 'hänga', 'ligga', 'låta', 'gripa', 'bidra', 'stiga', 'sticka', 'slösa', 'råka', 'märka', 'behöva', 'kosta', 'tillhöra', 'innehålla', 'bero', 'lyckas', 'fattas', 'saknas'].includes(x.sv))); const im = imperativeOf(v);
     return inItem(sk, `Imperatiivi: <b>${esc(v.sv)}</b> → ___! <span class="muted">(${esc(v.fi.split(',')[0])})</span>`, [im], `${v.sv} → ${im}!`); },
   passive(sk) { const nm = pick(PASSIVE_VERBS); const v = LEX.verbs.find(x => x.sv === nm); if (!v) return GEN.present(sk); const p = passiveOf(v); const k = Math.random() < 0.5 ? 'pres' : 'pret';
     return inItem(sk, `s-passiivi, ${k === 'pres' ? 'preesens' : 'imperfekti'}: <b>${esc(v.sv)}</b> → det ___ <span class="muted">(${esc(v.fi.split(',')[0])} – passiivi)</span>`, [p[k]], `${v.pres} → ${p.pres}, ${alts(v.pret)[0]} → ${p.pret}`); },
